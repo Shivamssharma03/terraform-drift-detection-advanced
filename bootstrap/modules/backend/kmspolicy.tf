@@ -19,7 +19,7 @@ resource "aws_kms_key_policy" "terraform_state" {
         Sid    = "AllowTerraformRole"
         Effect = "Allow"
         Principal = {
-          AWS = var.terraform_role_arn   ///// this is iam role arn from oidc module
+          AWS = var.terraform_role_arn ///// this is iam role arn from oidc module
         }
         Action = [
           "kms:Encrypt",
@@ -45,7 +45,7 @@ resource "aws_kms_key_policy" "terraform_state" {
         Resource = "*"
       }
 
-      
+
     ]
   })
 }

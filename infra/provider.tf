@@ -3,8 +3,8 @@ provider "aws" {
 
   default_tags {
     tags = {
-      ManagedBy   = "Terraform"
-      Project     = "drift-detection"
+      ManagedBy = "Terraform"
+      Project   = "drift-detection"
     }
   }
 }

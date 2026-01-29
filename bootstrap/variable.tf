@@ -10,7 +10,7 @@ variable "repo_subs" {
 variable "allowed_actions" {
   description = "List of allowed IAM actions for the role"
   type        = list(string)
-  
+
 }
 
 variable "bucket_name" {
