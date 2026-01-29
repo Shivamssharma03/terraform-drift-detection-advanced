@@ -1,4 +1,4 @@
-name: Terraform Plan infra
+name: Terraform CI/CD infra
 
 on:
   push:
@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   plan:
+    name: Terraform Plan
     runs-on: ubuntu-latest
 
     steps:
@@ -48,10 +49,56 @@ jobs:
         working-directory: infra
         run: terraform plan -out=tfplan
 
+      - name: Render Terraform Plan
+        working-directory: infra
+        run: terraform show -no-color tfplan > plan.txt
 
-      - name: Upload plan
+      - name: Publish Plan Summary
+        working-directory: infra
+        run: |
+          echo "## Terraform Plan (Review Before Apply)" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>Click to expand</summary>" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          cat plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Terraform Plan Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan          
+          name: tfplan
           path: infra/tfplan
-          retention-days: 1 
+          retention-days: 1
+
+  apply:
+    name: Terraform Apply
+    needs: plan
+    runs-on: ubuntu-latest
+
+    # 🔐 approval gate
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role
+          aws-region: us-east-1
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Apply (approved)
+        working-directory: infra
+        run: terraform apply tfplan
