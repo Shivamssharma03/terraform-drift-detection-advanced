@@ -1,0 +1,55 @@
+name: Terraform Plan infra
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - infra/**
+  pull_request:
+    paths:
+      - infra/**
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform FMT (recursive)
+        working-directory: infra
+        run: terraform fmt -recursive -check
+
+      - name: Terraform Init (validate)
+        working-directory: infra
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: infra
+        run: terraform validate
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::222575804024:role/github-actions-oidc-role
+          aws-region: us-east-1
+
+      - name: Terraform Init (backend)
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -out=tfplan
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/tfplan
