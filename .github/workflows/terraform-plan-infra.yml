@@ -75,8 +75,12 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
 
+ 
     # 🔐 approval gate
     environment: production
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
