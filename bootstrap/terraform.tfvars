@@ -1,6 +1,7 @@
 role_name = "github-actions-oidc-role"
 repo_subs = [
-  "repo:Shivamssharma03/terraform-drift-detection-advanced:*"
+  "repo:Shivamssharma03/terraform-drift-detection-advanced:ref:refs/heads/dev",
+  "repo:Shivamssharma03/terraform-drift-detection-advanced:ref:refs/heads/main"
 ]
 allowed_actions = [
   "s3:*",
