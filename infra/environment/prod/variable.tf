@@ -19,5 +19,5 @@ variable "bucket_name" {
 variable "environment" {
   description = "Environment name"
   type        = string
-  
+
 }
