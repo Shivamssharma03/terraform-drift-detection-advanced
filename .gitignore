@@ -5,7 +5,17 @@ bootstrap/cache/
 bootstrap/.terraform/
 infra/terraform/
 
-infra/.terraform/
+infra/environment/prod/.terraform/
+infra/environment/dev/.terraform/ 
+
 *.tfstate
 *.tfstate.backup    
 *.terraform.lock.hcl
+
+# Terraform
+.terraform/
+.terraform.lock.hcl.backup
+*.tfstate
+*.tfstate.*
+crash.log
+terraform.tfvars.backup
