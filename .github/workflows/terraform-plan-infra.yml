@@ -82,8 +82,8 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-    id-token: write
-    contents: read
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout repo
@@ -128,13 +128,11 @@ jobs:
     runs-on: ubuntu-latest
    # Manual approval gate before applying to PROD
     environment: production
+
+
     permissions:
-    id-token: write
-    contents: read
-
- 
-
-    
+      id-token: write
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
