@@ -17,11 +17,7 @@ resource "aws_security_group" "example" {
 
 }
 
-# resource "aws_key_pair" "example" {
-#   key_name   = "terraform-key"
-#   public_key = file("~/.ssh/id_rsa.pub") 
-#   
-# }
+
 resource "aws_instance" "example" {
   ami             = "ami-0b6c6ebed2801a5cb"
   instance_type   = var.instance_type
@@ -29,7 +25,7 @@ resource "aws_instance" "example" {
   # key_name      = aws_key_pair.example.key_name
 
   tags = {
-    Name = "terraform-ec2"
-  }
+    Name = "terraform-ec2-${var.environment}"
 
+}
 }
