@@ -75,6 +75,9 @@ jobs:
           retention-days: 1
 
   apply-dev:
+    permissions:
+    id-token: write 
+    contents: read
     name: Terraform Apply (DEV)
     needs: plan
     if: github.ref_name == 'dev'
@@ -115,6 +118,10 @@ jobs:
         run: terraform apply -auto-approve -lock=true -lock-timeout=5m tfplan
 
   apply-prod:
+
+    permissions:
+    id-token: write
+    contents: read
     name: Terraform Apply (PROD)
     needs: plan
     if: github.ref_name == 'main'
@@ -122,7 +129,8 @@ jobs:
 
     # Manual approval gate before applying to PROD
     environment: production
-
+    permissions:
+    
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
