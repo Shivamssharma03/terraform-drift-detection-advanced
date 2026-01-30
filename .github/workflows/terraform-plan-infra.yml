@@ -75,13 +75,15 @@ jobs:
           retention-days: 1
 
   apply-dev:
-    permissions:
-    id-token: write 
-    contents: read
+   
     name: Terraform Apply (DEV)
     needs: plan
     if: github.ref_name == 'dev'
     runs-on: ubuntu-latest
+    
+    permissions:
+    id-token: write
+    contents: read
 
     steps:
       - name: Checkout repo
@@ -119,17 +121,19 @@ jobs:
 
   apply-prod:
 
-    permissions:
-    id-token: write
-    contents: read
+   
     name: Terraform Apply (PROD)
     needs: plan
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
-
-    # Manual approval gate before applying to PROD
+   # Manual approval gate before applying to PROD
     environment: production
     permissions:
+    id-token: write
+    contents: read
+
+ 
+
     
     steps:
       - name: Checkout repo
