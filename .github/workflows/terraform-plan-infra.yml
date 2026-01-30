@@ -18,144 +18,144 @@ permissions:
   id-token: write
   contents: read
 
-jobs:
-  plan:
-    name: Terraform Plan
-    runs-on: ubuntu-latest
+  jobs:
+    plan:
+      name: Terraform Plan
+      runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+      steps:
+        - uses: actions/checkout@v4
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
+        - uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.6.6
 
-      # 🔹 Decide env + directory
-      - name: Set environment from branch
-        run: |
-          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
-            echo "ENV=prod" >> $GITHUB_ENV
-            echo "TF_DIR=infra/environment/prod" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF_NAME}" == "dev" ]]; then
+        # 🔹 Decide env + directory
+        - name: Set environment from branch
+          run: |
+            if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+              echo "ENV=prod" >> $GITHUB_ENV
+              echo "TF_DIR=infra/environment/prod" >> $GITHUB_ENV
+            elif [[ "${GITHUB_REF_NAME}" == "dev" ]]; then
+              echo "ENV=dev" >> $GITHUB_ENV
+              echo "TF_DIR=infra/environment/dev" >> $GITHUB_ENV
+            else
+              echo "Unsupported branch"
+              exit 1
+            fi
+
+        - name: Terraform FMT
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform fmt -recursive -check
+
+        - name: Terraform Init (no backend)
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform init -backend=false
+
+        - name: Terraform Validate
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform validate
+
+        - name: Configure AWS credentials (OIDC)
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-${{ env.ENV }}-role
+            aws-region: us-east-1
+
+        - name: Terraform Init (backend)
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform init
+
+        - name: Terraform Plan
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform plan -out=tfplan
+
+        - name: Upload Plan Artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: tfplan-${{ env.ENV }}
+            path: ${{ env.TF_DIR }}/tfplan
+            retention-days: 1
+
+    apply-dev:
+      name: Terraform Apply (DEV)
+      needs: plan
+      if: github.ref_name == 'dev' && github.event_name == 'push'
+      runs-on: ubuntu-latest
+
+      permissions:
+        id-token: write
+        contents: read
+
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Set DEV environment
+          run: |
             echo "ENV=dev" >> $GITHUB_ENV
             echo "TF_DIR=infra/environment/dev" >> $GITHUB_ENV
-          else
-            echo "Unsupported branch"
-            exit 1
-          fi
 
-      - name: Terraform FMT
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform fmt -recursive -check
+        - uses: actions/download-artifact@v4
+          with:
+            name: tfplan-dev
+            path: ${{ env.TF_DIR }}
 
-      - name: Terraform Init (no backend)
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform init -backend=false
+        - uses: aws-actions/configure-aws-credentials@v4
+          with:
+            role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-dev-role
+            aws-region: us-east-1
 
-      - name: Terraform Validate
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform validate
+        - uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.6.6
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-${{ env.ENV }}-role
-          aws-region: us-east-1
+        - name: Terraform Init
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform init
 
-      - name: Terraform Init (backend)
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform init
+        - name: Terraform Apply (DEV auto)
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform apply -auto-approve tfplan
 
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -out=tfplan
+    apply-prod:
+      name: Terraform Apply (PROD)
+      needs: plan
+      if: github.ref_name == 'main' && github.event_name == 'push'
+      runs-on: ubuntu-latest
 
-      - name: Upload Plan Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ env.ENV }}
-          path: ${{ env.TF_DIR }}/tfplan
-          retention-days: 1
+      #  Manual approval gate
+      environment: production
 
-  apply-dev:
-    name: Terraform Apply (DEV)
-    needs: plan
-    if: github.ref_name == 'dev' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+      permissions:
+        id-token: write
+        contents: read
 
-    permissions:
-      id-token: write
-      contents: read
+      steps:
+        - uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v4
+        - name: Set PROD environment
+          run: |
+            echo "ENV=prod" >> $GITHUB_ENV
+            echo "TF_DIR=infra/environment/prod" >> $GITHUB_ENV
 
-      - name: Set DEV environment
-        run: |
-          echo "ENV=dev" >> $GITHUB_ENV
-          echo "TF_DIR=infra/environment/dev" >> $GITHUB_ENV
+        - uses: actions/download-artifact@v4
+          with:
+            name: tfplan-prod
+            path: ${{ env.TF_DIR }}
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: tfplan-dev
-          path: ${{ env.TF_DIR }}
+        - uses: aws-actions/configure-aws-credentials@v4
+          with:
+            role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-prod-role
+            aws-region: us-east-1
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-dev-role
-          aws-region: us-east-1
+        - uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: 1.6.6
 
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
+        - name: Terraform Init
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform init
 
-      - name: Terraform Init
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform init
-
-      - name: Terraform Apply (DEV auto)
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform apply -auto-approve tfplan
-
-  apply-prod:
-    name: Terraform Apply (PROD)
-    needs: plan
-    if: github.ref_name == 'main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-
-    #  Manual approval gate
-    environment: production
-
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set PROD environment
-        run: |
-          echo "ENV=prod" >> $GITHUB_ENV
-          echo "TF_DIR=infra/environment/prod" >> $GITHUB_ENV
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: tfplan-prod
-          path: ${{ env.TF_DIR }}
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-prod-role
-          aws-region: us-east-1
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.6
-
-      - name: Terraform Init
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform init
-
-      - name: Terraform Apply (PROD approved)
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform apply tfplan
+        - name: Terraform Apply (PROD approved)
+          working-directory: ${{ env.TF_DIR }}
+          run: terraform apply tfplan
