@@ -27,5 +27,5 @@ resource "aws_instance" "example" {
   tags = {
     Name = "terraform-ec2-${var.environment}"
 
-}
+  }
 }
