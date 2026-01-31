@@ -14,7 +14,9 @@ resource "aws_security_group" "example" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
+tags = {
+    Name = "terraform-ec2-sg-${var.environment}"
+  }
 }
 
 
