@@ -2,8 +2,8 @@ name: Terraform Drift Detection with Email Alert
 
 on:
   schedule:
-    - cron: "0 14 * * *"   # Daily at 2 PM UTC
-  workflow_dispatch:
+    - cron: "0 14 * * *"
+  workflow_dispatch:      # Manual trigger button
 
 permissions:
   id-token: write
@@ -53,29 +53,35 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
 
+      #  Drift detection (captures exit code correctly)
       - name: Terraform Drift Check
         id: plan
-        continue-on-error: true
         working-directory: ${{ env.TF_DIR }}
-        run: terraform plan -detailed-exitcode -no-color
+        continue-on-error: true
+        run: |
+          terraform plan -detailed-exitcode -no-color
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
 
+      # Generate drift report
       - name: Generate Drift Report
-        if: steps.plan.outcome == 'failure'
+        if: steps.plan.outputs.exitcode == '2'
         working-directory: ${{ env.TF_DIR }}
         run: |
           terraform plan -out=tfplan -no-color
           terraform show tfplan > drift.txt
 
+      #  Upload artifact
       - name: Upload Drift Artifact
-        if: steps.plan.outcome == 'failure'
+        if: steps.plan.outputs.exitcode == '2'
         uses: actions/upload-artifact@v4
         with:
           name: terraform-drift-report-${{ env.ENV }}
           path: ${{ env.TF_DIR }}/drift.txt
           retention-days: 2
 
+      #  Email alert
       - name: Send Email Alert (Drift Detected)
-        if: steps.plan.outcome == 'failure'
+        if: steps.plan.outputs.exitcode == '2'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -91,9 +97,14 @@ jobs:
             Environment: ${{ env.ENV }}
             Branch: ${{ matrix.env.branch }}
 
+            Terraform detected infrastructure drift.
+
             Run URL:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
+      # ❌ Fail job if drift exists
       - name: Fail Pipeline if Drift Found
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
+        if: steps.plan.outputs.exitcode == '2'
+        run: |
+          echo "❌ Terraform Drift Detected — failing pipeline"
+          exit 1
