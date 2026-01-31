@@ -2,7 +2,7 @@ name: Terraform Drift Detection with Email Alert
 
 on:
   schedule:
-    - cron: "0 14 * * *"
+    - cron: "0 14 * * *"  
   workflow_dispatch:      # Manual trigger button
 
 permissions:
@@ -53,16 +53,19 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
 
-      #  Drift detection (captures exit code correctly)
+      #  DRIFT DETECTION — THIS IS THE CRITICAL FIX
       - name: Terraform Drift Check
         id: plan
         working-directory: ${{ env.TF_DIR }}
         continue-on-error: true
         run: |
+          set +e
           terraform plan -detailed-exitcode -no-color
-          echo "exitcode=$?" >> $GITHUB_OUTPUT
+          EXIT_CODE=$?
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          set -e
 
-      # Generate drift report
+      #  Generate drift report
       - name: Generate Drift Report
         if: steps.plan.outputs.exitcode == '2'
         working-directory: ${{ env.TF_DIR }}
@@ -88,11 +91,11 @@ jobs:
           server_port: 587
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "🚨 Terraform Drift Detected (${{ env.ENV }}) – ${{ github.repository }}"
+          subject: " Terraform Drift Detected (${{ env.ENV }}) – ${{ github.repository }}"
           to: sshivam03sharma@gmail.com
           from: Terraform CI <${{ secrets.SMTP_USERNAME }}>
           body: |
-            🚨 TERRAFORM DRIFT DETECTED
+            TERRAFORM DRIFT DETECTED
 
             Environment: ${{ env.ENV }}
             Branch: ${{ matrix.env.branch }}
@@ -102,9 +105,9 @@ jobs:
             Run URL:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-      # ❌ Fail job if drift exists
+      #  Fail job if drift exists
       - name: Fail Pipeline if Drift Found
         if: steps.plan.outputs.exitcode == '2'
         run: |
-          echo "❌ Terraform Drift Detected — failing pipeline"
+          echo " Terraform Drift Detected — failing pipeline"
           exit 1
