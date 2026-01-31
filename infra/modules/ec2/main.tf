@@ -1,5 +1,5 @@
 resource "aws_security_group" "example" {
-  name        = "terraform-ec2-sg"
+  name        = "terraform-ec2-sg-${var.environment}"
   description = "Security group for EC2 instance"
 
   ingress {
