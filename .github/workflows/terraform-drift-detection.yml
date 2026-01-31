@@ -1,8 +1,8 @@
-name: Terraform Drift Detection with Email Alert
+name: Terraform Drift Detection
 
 on:
   schedule:
-    - cron: "0 14 * * *"   # Daily at 2 PM UTC
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
@@ -29,18 +29,16 @@ jobs:
       TF_DIR: ${{ matrix.env.tf_dir }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.env.branch }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.6.6
+          terraform_wrapper: false
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/github-actions-oidc-role
           aws-region: ${{ env.AWS_REGION }}
@@ -49,57 +47,61 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform init -input=false
 
-      - name: Terraform Validate
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform validate
-
-      # ✅ DRIFT CHECK — FINAL FIX
+      # 🔥 FIXED DRIFT DETECTION
       - name: Terraform Drift Check
         id: plan
         working-directory: ${{ env.TF_DIR }}
         shell: bash
         run: |
-          terraform plan -detailed-exitcode -no-color || true
+          set +e
+          terraform plan -detailed-exitcode -no-color -input=false \
+            > plan_output.txt 2>&1
           EXIT_CODE=$?
-          echo "exitcode=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          set -e
+
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$EXIT_CODE" -eq 2 ]; then
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate Drift Report
-        if: steps.plan.outputs.exitcode == '2'
+        if: steps.plan.outputs.drift_detected == 'true'
         working-directory: ${{ env.TF_DIR }}
         run: |
-          terraform plan -out=tfplan -no-color
-          terraform show tfplan > drift.txt
+          terraform show -no-color tfplan || true
+          cat plan_output.txt > drift.txt
 
       - name: Upload Drift Artifact
-        if: steps.plan.outputs.exitcode == '2'
+        if: steps.plan.outputs.drift_detected == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: terraform-drift-report-${{ env.ENV }}
+          name: terraform-drift-${{ env.ENV }}
           path: ${{ env.TF_DIR }}/drift.txt
           retention-days: 2
 
-      - name: Send Email Alert (Drift Detected)
-        if: steps.plan.outputs.exitcode == '2'
+      - name: Send Email Alert
+        if: steps.plan.outputs.drift_detected == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 587
           username: ${{ secrets.SMTP_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "🚨 Terraform Drift Detected (${{ env.ENV }}) – ${{ github.repository }}"
+          subject: "🚨 Terraform Drift Detected (${{ env.ENV }})"
           to: sshivam03sharma@gmail.com
           from: Terraform CI <${{ secrets.SMTP_USERNAME }}>
           body: |
-            🚨 TERRAFORM DRIFT DETECTED
+            Terraform drift detected.
 
             Environment: ${{ env.ENV }}
             Branch: ${{ matrix.env.branch }}
 
-            Run URL:
+            Run:
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-      - name: Fail Pipeline if Drift Found
-        if: steps.plan.outputs.exitcode == '2'
-        run: |
-          echo "❌ Terraform Drift Detected"
-          exit 1
+      - name: Fail Job on Drift
+        if: steps.plan.outputs.drift_detected == 'true'
+        run: exit 1
